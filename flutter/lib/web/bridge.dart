@@ -29,7 +29,7 @@ sealed class EventToUI {
 }
 
 class EventToUI_Event implements EventToUI {
-  const EventToUI_Event(final String field0) : this.field = field0;
+  const EventToUI_Event(final String field0) : field = field0;
   final String field;
   String get field0 => field;
 }
@@ -2031,7 +2031,9 @@ class RustdeskImpl {
   }
 
   String mainResolveAvatarUrl({required String avatar, dynamic hint}) {
-    return js.context.callMethod('getByName', ['resolve_avatar_url', avatar])?.toString() ?? avatar;
+    return js.context.callMethod(
+            'getByName', ['resolve_avatar_url', avatar])?.toString() ??
+        avatar;
   }
 
   void dispose() {}

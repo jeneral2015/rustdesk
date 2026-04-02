@@ -12,28 +12,37 @@ enum ChatPageType {
   desktopCM,
 }
 
-class ChatPage extends StatelessWidget implements PageShape {
-  late final ChatModel chatModel;
+class ChatPage extends StatefulWidget implements PageShape {
+  final ChatModel? chatModel;
   final ChatPageType? type;
+  final MessageKey? messageKey;
+  final bool isStandalone;
+  final bool hideControlButtons;
+  final VoidCallback? onClose;
 
-  ChatPage({ChatModel? chatModel, this.type}) {
-    this.chatModel = chatModel ?? gFFI.chatModel;
-  }
+  const ChatPage({
+    Key? key,
+    this.chatModel,
+    this.type,
+    this.messageKey,
+    this.isStandalone = false,
+    this.hideControlButtons = false,
+    this.onClose,
+  }) : super(key: key);
 
   @override
-  final title = translate("Chat");
+  String get title => translate("Chat");
 
   @override
-  final icon = unreadTopRightBuilder(gFFI.chatModel.mobileUnreadSum);
+  Widget get icon => unreadTopRightBuilder(gFFI.chatModel.mobileUnreadSum);
 
   @override
-  final appBarActions = [
+  List<Widget> get appBarActions => [
     PopupMenuButton<MessageKey>(
         tooltip: "",
         icon: unreadTopRightBuilder(gFFI.chatModel.mobileUnreadSum,
             icon: Icon(Icons.group)),
         itemBuilder: (context) {
-          // only mobile need [appBarActions], just bind gFFI.chatModel
           final chatModel = gFFI.chatModel;
           return chatModel.messages.entries.map((entry) {
             final key = entry.key;
@@ -75,6 +84,22 @@ class ChatPage extends StatelessWidget implements PageShape {
   ];
 
   @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  late ChatModel chatModel;
+
+  @override
+  void initState() {
+    super.initState();
+    chatModel = widget.chatModel ?? gFFI.chatModel;
+    if (widget.messageKey != null) {
+      chatModel.changeCurrentKey(widget.messageKey!);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: chatModel,
@@ -82,15 +107,16 @@ class ChatPage extends StatelessWidget implements PageShape {
         color: Theme.of(context).scaffoldBackgroundColor,
         child: Consumer<ChatModel>(
           builder: (context, chatModel, child) {
-            final readOnly = type == ChatPageType.mobileMain &&
-                    (chatModel.currentKey.connId == ChatModel.clientModeID ||
+            final currentKey = widget.messageKey ?? chatModel.currentKey;
+            final readOnly = widget.type == ChatPageType.mobileMain &&
+                    (currentKey.connId == ChatModel.clientModeID ||
                         gFFI.serverModel.clients.every((e) =>
-                            e.id != chatModel.currentKey.connId ||
-                            chatModel.currentUser == null)) ||
-                type == ChatPageType.desktopCM &&
+                            e.id != currentKey.connId ||
+                            chatModel.messages[currentKey]?.chatUser == null)) ||
+                widget.type == ChatPageType.desktopCM &&
                     gFFI.serverModel.clients
                             .firstWhereOrNull(
-                                (e) => e.id == chatModel.currentKey.connId)
+                                (e) => e.id == currentKey.connId)
                             ?.disconnected ==
                         true;
             return Stack(
@@ -100,7 +126,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                     onSend: chatModel.send,
                     currentUser: chatModel.me,
                     messages: chatModel
-                            .messages[chatModel.currentKey]?.chatMessages ??
+                            .messages[currentKey]?.chatMessages ??
                         [],
                     readOnly: readOnly,
                     inputOptions: InputOptions(
@@ -136,7 +162,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                       textColor: Colors.white,
                       maxWidth: constraints.maxWidth * 0.7,
                       messageTextBuilder: (message, _, __) {
-                        final isOwnMessage = message.user.id.isBlank!;
+                        final isOwnMessage = message.user.id == chatModel.me.id;
                         return Column(
                           crossAxisAlignment: isOwnMessage
                               ? CrossAxisAlignment.end
@@ -156,7 +182,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                       },
                       messageDecorationBuilder:
                           (message, previousMessage, nextMessage) {
-                        final isOwnMessage = message.user.id.isBlank!;
+                        final isOwnMessage = message.user.id == chatModel.me.id;
                         return defaultMessageDecoration(
                           color:
                               isOwnMessage ? MyTheme.accent : Colors.blueGrey,

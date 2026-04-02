@@ -16,7 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../common.dart';
+import '../../common.dart' hide Dialog;
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
@@ -32,6 +32,8 @@ class DesktopServerPage extends StatefulWidget {
 class _DesktopServerPageState extends State<DesktopServerPage>
     with WindowListener, AutomaticKeepAliveClientMixin {
   final tabController = gFFI.serverModel.tabController;
+  bool _isWindowHidden = false;
+  bool _isChatWindowOnlyMode = true; // Chat-only background service mode
 
   _DesktopServerPageState() {
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, "");
@@ -45,6 +47,101 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   void initState() {
     windowManager.addListener(this);
     super.initState();
+    // Chat-only background mode: hide main window and listen for messages
+    if (_isChatWindowOnlyMode) {
+      _hideMainWindow();
+      gFFI.chatModel.addListener(_onNewMessageReceived);
+      gFFI.chatModel.enableChatWindowOnlyMode();
+    }
+  }
+
+  Future<void> _hideMainWindow() async {
+    if (!_isWindowHidden && _isChatWindowOnlyMode) {
+      await windowManager.hide();
+      _isWindowHidden = true;
+      debugPrint("Main window hidden - running in background chat-only mode");
+    }
+  }
+
+  void _onNewMessageReceived() {
+    final unreadKeys = gFFI.chatModel.getUnreadMessageKeys();
+    if (unreadKeys.isNotEmpty) {
+      for (var key in unreadKeys) {
+        _showChatDialog(key);
+      }
+    }
+  }
+
+  void _showChatDialog(MessageKey key) {
+    if (gFFI.chatModel.isChatWindowOpen(key)) {
+      return;
+    }
+    gFFI.chatModel.registerOpenChatWindow(key);
+
+    Get.dialog(
+      Dialog(
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          width: 450,
+          height: 600,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(Get.context!).scaffoldBackgroundColor,
+          ),
+          child: Column(
+            children: [
+              _buildChatDialogTitle(key),
+              Expanded(
+                child: ChatPage(
+                  type: ChatPageType.desktopCM,
+                  messageKey: key,
+                  isStandalone: true,
+                  hideControlButtons: true,
+                  onClose: () {
+                    gFFI.chatModel.unregisterOpenChatWindow(key);
+                    Get.back();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildChatDialogTitle(MessageKey key) {
+    final client =
+        gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == key.connId);
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: MyTheme.accent,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              client?.name ?? key.peerId,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () {
+              gFFI.chatModel.unregisterOpenChatWindow(key);
+              Get.back();
+            },
+            icon: const Icon(Icons.close, color: Colors.white),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -75,6 +172,10 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    // Return empty widget in chat-only mode (window is hidden)
+    if (_isChatWindowOnlyMode) {
+      return const SizedBox.shrink();
+    }
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: gFFI.serverModel),
@@ -190,8 +291,8 @@ class ConnectionManagerState extends State<ConnectionManager>
               showTitle: false,
               showMaximize: false,
               showMinimize: true,
-              showClose: true,
-              onWindowCloseButton: handleWindowCloseButton,
+              showClose: false, // Hide close button in chat-only mode
+              onWindowCloseButton: null, // Disable window close button
               controller: serverModel.tabController,
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
@@ -302,7 +403,7 @@ class ConnectionManagerState extends State<ConnectionManager>
           const SizedBox(
             width: 4.0,
           ),
-          const _CloseButton()
+          // Close button removed - running in background service mode
         ],
       ),
     );
@@ -387,17 +488,8 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: () {
-        windowManager.close();
-      },
-      icon: const Icon(
-        IconFont.close,
-        size: 18,
-      ),
-      splashColor: Colors.transparent,
-      hoverColor: Colors.transparent,
-    );
+    // Return empty widget - no close button in background service mode
+    return const SizedBox.shrink();
   }
 }
 
@@ -988,18 +1080,21 @@ class _CmControlPanel extends StatelessWidget {
         ),
         Row(
           children: [
-            Expanded(
-              child: buildButton(context,
-                  color: Colors.redAccent,
-                  onClick: handleDisconnect,
-                  text: 'Disconnect',
-                  icon: Icon(
-                    Icons.link_off_rounded,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                  textColor: Colors.white),
-            ),
+            // Disconnect button removed - service runs in background mode
+            // Only show in non-chat-only mode
+            if (!gFFI.chatModel.chatWindowOnlyMode)
+              Expanded(
+                child: buildButton(context,
+                    color: Colors.redAccent,
+                    onClick: handleDisconnect,
+                    text: 'Disconnect',
+                    icon: Icon(
+                      Icons.link_off_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    textColor: Colors.white),
+              ),
           ],
         )
       ],
@@ -1007,6 +1102,11 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   buildDisconnected(BuildContext context) {
+    // Close button removed - service continues running in background
+    // Return empty widget in chat-only mode
+    if (gFFI.chatModel.chatWindowOnlyMode) {
+      return const SizedBox.shrink();
+    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

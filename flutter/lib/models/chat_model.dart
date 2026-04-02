@@ -91,6 +91,11 @@ class ChatModel with ChangeNotifier {
 
   late final Map<MessageKey, MessageBody> _messages = {};
 
+  // Chat-only background service mode variables
+  bool _chatWindowOnlyMode = false;
+  final Set<String> _openChatWindows = {};
+  final Map<MessageKey, bool> _unreadMessages = {};
+
   MessageKey _currentKey = MessageKey('', -2); // -2 is invalid value
   late bool _isShowCMSidePage = false;
 
@@ -99,6 +104,39 @@ class ChatModel with ChangeNotifier {
   MessageKey get currentKey => _currentKey;
 
   bool get isShowCMSidePage => _isShowCMSidePage;
+
+  // Chat-only mode getters and methods
+  bool get chatWindowOnlyMode => _chatWindowOnlyMode;
+
+  void enableChatWindowOnlyMode() {
+    _chatWindowOnlyMode = true;
+    notifyListeners();
+  }
+
+  bool isChatWindowOpen(MessageKey key) {
+    return _openChatWindows.contains(key.toString());
+  }
+
+  void registerOpenChatWindow(MessageKey key) {
+    _openChatWindows.add(key.toString());
+    _unreadMessages[key] = false;
+    notifyListeners();
+  }
+
+  void unregisterOpenChatWindow(MessageKey key) {
+    _openChatWindows.remove(key.toString());
+    notifyListeners();
+  }
+
+  Set<MessageKey> getUnreadMessageKeys() {
+    final unreadKeys = <MessageKey>{};
+    for (var entry in _unreadMessages.entries) {
+      if (entry.value == true) {
+        unreadKeys.add(entry.key);
+      }
+    }
+    return unreadKeys;
+  }
 
   void setOverlayState(BlockableOverlayState blockableOverlayState) {
     _blockableOverlayState = blockableOverlayState;
@@ -464,6 +502,10 @@ class ChatModel with ChangeNotifier {
       _messages[key] = MessageBody(message.user, []);
     }
     _messages[key]?.insert(message);
+    // Mark as unread in chat-only mode if message is not from local user
+    if (_chatWindowOnlyMode && message.user.id != me.id) {
+      _unreadMessages[key] = true;
+    }
   }
 
   updateConnIdOfKey(MessageKey key) {

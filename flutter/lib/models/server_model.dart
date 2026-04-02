@@ -37,7 +37,6 @@ class ServerModel with ChangeNotifier {
   String _temporaryPasswordLength = "";
   bool _allowNumericOneTimePassword = false;
   String _approveMode = "";
-  int _zeroClientLengthCounter = 0;
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
@@ -163,13 +162,10 @@ class ServerModel with ChangeNotifier {
           updateClientState(res);
         } else {
           if (_clients.isEmpty) {
+            // Do not close window - service continues running in background
+            // Only hide the window if needed
             hideCmWindow();
-            if (_zeroClientLengthCounter++ == 12) {
-              // 6 second
-              windowManager.close();
-            }
           } else {
-            _zeroClientLengthCounter = 0;
             if (!hideCm) showCmWindow();
           }
         }
