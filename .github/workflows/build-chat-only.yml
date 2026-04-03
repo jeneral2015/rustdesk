@@ -1,0 +1,603 @@
+name: Build RustDesk Chat-Only Windows & Android
+
+# يعمل تلقائياً على push/pull request و يدوياً عبر workflow_dispatch
+on:
+  push:
+    branches: [master, main]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      upload_artifact:
+        description: "Upload artifacts to release"
+        type: boolean
+        default: true
+      upload_tag:
+        description: "Release tag name"
+        type: string
+        default: "nightly"
+
+env:
+  # إصدارات الأدوات المطلوبة
+  SCITER_RUST_VERSION: "1.75"
+  RUST_VERSION: "1.75"
+  CARGO_NDK_VERSION: "3.1.2"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  ANDROID_FLUTTER_VERSION: "3.24.5"
+  NDK_VERSION: "r28c"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  # vcpkg
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # إصدار التطبيق
+  VERSION: "1.4.6"
+  # اسم الـ tag للرفع
+  TAG_NAME: "${{ github.event.inputs.upload_tag || 'nightly' }}"
+  UPLOAD_ARTIFACT: "${{ github.event.inputs.upload_artifact || 'true' }}"
+
+jobs:
+  # ============================================================================
+  # المرحلة 1: توليد Flutter-Rust Bridge
+  # ============================================================================
+  generate-bridge:
+    name: Generate Flutter-Rust Bridge
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            g++ \
+            libclang-dev \
+            libgtk-3-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: bridge-ubuntu-22.04
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Flutter Rust Bridge deps
+        shell: bash
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          pushd flutter && flutter pub get && popd
+
+      - name: Run Flutter Rust Bridge
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Upload Bridge Artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+            ./flutter/macos/Runner/bridge_generated.h
+            ./flutter/ios/Runner/bridge_generated.h
+
+  # ============================================================================
+  # المرحلة 2: بناء Windows
+  # ============================================================================
+  build-windows:
+    name: Build Windows ${{ matrix.job.arch }}
+    needs: [generate-bridge]
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-pc-windows-msvc,
+              arch: x86_64,
+              vcpkg-triplet: x64-windows-static,
+            }
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Replace Flutter engine with RustDesk custom engine
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
+        shell: bash
+        run: |
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
+
+      - name: Build RustDesk
+        shell: pwsh
+        run: |
+          # بناء RustDesk للويندوز
+          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+          mv .\flutter\build\windows\x64\runner\Release .\rustdesk
+          
+          # تحميل ملفات Virtual Display Driver
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 .\rustdesk
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build MSI
+        run: |
+          pushd ./res/msi
+          python preprocess.py --arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+          sha256sum ../../SignOutput/rustdesk-*.msi
+
+      - name: Upload unsigned Windows artifact
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-unsigned-windows-${{ matrix.job.arch }}
+          path: rustdesk
+
+      - name: Publish Windows Release
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.msi
+            ./SignOutput/rustdesk-*.exe
+
+  # ============================================================================
+  # المرحلة 3: بناء Android (Split Per ABI)
+  # ============================================================================
+  build-android:
+    name: Build Android ${{ matrix.job.arch }}
+    needs: [generate-bridge]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              android_target: arm64-v8a,
+            }
+          - {
+              arch: armv7,
+              target: armv7-linux-androideabi,
+              android_target: armeabi-v7a,
+            }
+          - {
+              arch: x86_64,
+              target: x86_64-linux-android,
+              android_target: x86_64,
+            }
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc-multilib \
+               git \
+               g++ \
+               g++-multilib \
+               libayatana-appindicator3-dev \
+               libasound2-dev \
+               libc6-dev \
+               libclang-dev \
+               libunwind-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-dev \
+               nasm \
+               ninja-build \
+               openjdk-17-jdk-headless \
+               pkg-config \
+               tree \
+               wget
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch Flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          ./flutter/build_android_deps.sh "${{ matrix.job.android_target }}"
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache-android
+          key: ${{ matrix.job.target }}
+
+      - name: Build RustDesk library
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add ${{ matrix.job.target }}
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          cargo ndk --platform 21 --target ${{ matrix.job.target }} build --release --features flutter,hwcodec
+          mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.job.android_target }}
+          cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.android_target }}/librustdesk.so
+
+      - name: Upload RustDesk library to Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: librustdesk.so.${{ matrix.job.target }}
+          path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
+
+      - name: Build Android APK
+        shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          # زيادة ذاكرة Gradle
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
+          # استخدام debug signing (بدون مفاتيح خاصة)
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          # نسخ libc++_shared.so
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.job.target }}/libc++_shared.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.android_target }}/
+          cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.android_target }}/librustdesk.so
+          # بناء APK
+          pushd flutter
+          flutter build apk --release --target-platform android-${{ matrix.job.arch == 'aarch64' && 'arm64' || matrix.job.arch == 'armv7' && 'arm' || 'x64' }} --split-per-abi
+          popd
+          mkdir -p signed-apk
+          mv ./flutter/build/app/outputs/flutter-apk/app-${{ matrix.job.android_target }}-release.apk signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+
+      - name: Upload Android APK
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+          path: signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+
+      - name: Publish Android APK
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+
+  # ============================================================================
+  # المرحلة 4: بناء Android Universal APK
+  # ============================================================================
+  build-android-universal:
+    name: Build Android Universal APK
+    needs: [build-android]
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.inputs.upload_artifact != 'false' }}
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc-multilib \
+               git \
+               g++ \
+               g++-multilib \
+               libayatana-appindicator3-dev \
+               libasound2-dev \
+               libc6-dev \
+               libclang-dev \
+               libunwind-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-dev \
+               nasm \
+               ninja-build \
+               openjdk-17-jdk-headless \
+               pkg-config \
+               tree \
+               wget
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch Flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Download RustDesk libraries
+        uses: actions/download-artifact@master
+        with:
+          name: librustdesk.so.aarch64-linux-android
+          path: ./flutter/android/app/src/main/jniLibs/arm64-v8a
+
+      - name: Download RustDesk libraries
+        uses: actions/download-artifact@master
+        with:
+          name: librustdesk.so.armv7-linux-androideabi
+          path: ./flutter/android/app/src/main/jniLibs/armeabi-v7a
+
+      - name: Download RustDesk libraries
+        uses: actions/download-artifact@master
+        with:
+          name: librustdesk.so.x86_64-linux-android
+          path: ./flutter/android/app/src/main/jniLibs/x86_64
+
+      - name: Build Universal APK
+        shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          # زيادة ذاكرة Gradle
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
+          # استخدام debug signing
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          # إعادة تسمية المكتبات
+          mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          mv ./flutter/android/app/src/main/jniLibs/armeabi-v7a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+          mv ./flutter/android/app/src/main/jniLibs/x86_64/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/x86_64/librustdesk.so
+          # نسخ libc++_shared.so
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/x86_64/
+          # بناء APK موحد
+          pushd flutter
+          flutter build apk --release --target-platform android-arm64,android-arm,android-x64
+          popd
+          mkdir -p signed-apk
+          mv ./flutter/build/app/outputs/flutter-apk/app-release.apk signed-apk/rustdesk-${{ env.VERSION }}-universal.apk
+
+      - name: Upload Universal APK
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-universal.apk
+          path: signed-apk/rustdesk-${{ env.VERSION }}-universal.apk
+
+      - name: Publish Universal APK
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            signed-apk/rustdesk-${{ env.VERSION }}-universal.apk
