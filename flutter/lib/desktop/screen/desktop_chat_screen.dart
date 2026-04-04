@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/chat_page.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Chat Window Screen - Draggable chat window without taskbar icon
@@ -43,10 +42,6 @@ class _ChatWindowScreenState extends State<ChatWindowScreen>
     await windowManager.setMinimumSize(Size(350, 400));
     await windowManager.setMaximumSize(Size(800, 900));
     await windowManager.center();
-
-    // Hide from taskbar and system tray
-    await windowManager.setSkipTaskbar(true);
-    platformFFI.ffiBind.mainHideDock();
 
     // Make window always on top for chat visibility
     await windowManager.setAlwaysOnTop(true);

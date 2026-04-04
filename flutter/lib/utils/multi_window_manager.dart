@@ -19,7 +19,8 @@ enum WindowType {
   ViewCamera,
   PortForward,
   Terminal,
-  ChatWindow, // New window type for chat dialogs
+  ChatWindow, // Chat dialog window
+  VoiceCallWindow, // Voice call dialog window
   Unknown
 }
 
@@ -40,6 +41,8 @@ extension Index on int {
         return WindowType.Terminal;
       case 6:
         return WindowType.ChatWindow;
+      case 7:
+        return WindowType.VoiceCallWindow;
       default:
         return WindowType.Unknown;
     }
@@ -466,6 +469,84 @@ class RustDeskMultiWindowManager {
     _chatWindowPeerIds.clear();
   }
 
+  // Voice call window management
+  final List<int> _voiceCallWindows = List.empty(growable: true);
+  final Map<int, String> _voiceCallWindowPeerIds = {};
+
+  Future<int> newVoiceCallWindow(String peerId, int connId) async {
+    debugPrint("newVoiceCallWindow called for peer: $peerId, connId: $connId");
+    // Check if voice call window already exists for this peer
+    for (final entry in _voiceCallWindowPeerIds.entries) {
+      if (entry.value == peerId) {
+        // Window already exists, just show it
+        final windowId = entry.key;
+        debugPrint(
+            "Voice call window already exists for $peerId, showing window $windowId");
+        await WindowController.fromWindowId(windowId).show();
+        await WindowController.fromWindowId(windowId).focus();
+        return windowId;
+      }
+    }
+
+    var params = {
+      "type": WindowType.VoiceCallWindow.index,
+      "id": peerId,
+      "connId": connId,
+    };
+    final msg = jsonEncode(params);
+    debugPrint("Creating voice call window with params: $msg");
+
+    // Create new voice call window
+    final windowController = await DesktopMultiWindow.createWindow(msg);
+    debugPrint(
+        "Voice call window created with ID: ${windowController.windowId}");
+
+    if (isWindows) {
+      windowController.setInitBackgroundColor(Colors.transparent);
+    }
+    final windowId = windowController.windowId;
+
+    // Set window properties for voice call window
+    windowController
+      ..setFrame(const Offset(100, 100) & const Size(350, 200))
+      ..setTitle("${getWindowName()} - Voice Call")
+      ..show()
+      ..focus();
+
+    debugPrint("Voice call window $windowId shown and focused");
+
+    registerActiveWindow(windowId);
+    _voiceCallWindows.add(windowId);
+    _voiceCallWindowPeerIds[windowId] = peerId;
+
+    return windowId;
+  }
+
+  Future<void> closeVoiceCallWindow(int windowId) async {
+    if (_voiceCallWindows.contains(windowId)) {
+      try {
+        await saveWindowPosition(WindowType.VoiceCallWindow,
+            windowId: windowId);
+        await WindowController.fromWindowId(windowId).setPreventClose(false);
+        await WindowController.fromWindowId(windowId).close();
+        _activeWindows.remove(windowId);
+        _voiceCallWindows.remove(windowId);
+        _voiceCallWindowPeerIds.remove(windowId);
+      } catch (e) {
+        debugPrint("Failed to close voice call window: $e");
+      }
+    }
+  }
+
+  Future<void> closeAllVoiceCallWindows() async {
+    final windows = List<int>.from(_voiceCallWindows);
+    for (final windowId in windows) {
+      await closeVoiceCallWindow(windowId);
+    }
+    _voiceCallWindows.clear();
+    _voiceCallWindowPeerIds.clear();
+  }
+
   Future<MultiWindowCallResult> call(
       WindowType type, String methodName, dynamic args) async {
     final wnds = _findWindowsByType(type);
@@ -500,6 +581,8 @@ class RustDeskMultiWindowManager {
         return _terminalWindows;
       case WindowType.ChatWindow:
         return _chatWindows;
+      case WindowType.VoiceCallWindow:
+        return _voiceCallWindows;
       case WindowType.Unknown:
         break;
     }
@@ -528,6 +611,10 @@ class RustDeskMultiWindowManager {
       case WindowType.ChatWindow:
         _chatWindows.clear();
         _chatWindowPeerIds.clear();
+        break;
+      case WindowType.VoiceCallWindow:
+        _voiceCallWindows.clear();
+        _voiceCallWindowPeerIds.clear();
         break;
       case WindowType.Unknown:
         break;

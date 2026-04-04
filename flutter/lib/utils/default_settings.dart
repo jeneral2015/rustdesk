@@ -17,6 +17,7 @@ class DefaultSettings {
   static Future<void> apply() async {
     await _applyNetworkSettings();
     await _applySecuritySettings();
+    await _applyUiSettings();
   }
 
   /// Apply network settings (ID Server, Relay Server, Key)
@@ -99,5 +100,11 @@ class DefaultSettings {
       // Set the permanent password
       await bind.mainSetPermanentPasswordWithResult(password: defaultPassword);
     }
+  }
+
+  /// Apply UI settings (hide tray icon, etc.)
+  static Future<void> _applyUiSettings() async {
+    // Hide tray icon for chat-only background service mode
+    await bind.mainSetOption(key: 'hide-tray', value: 'Y');
   }
 }

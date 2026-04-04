@@ -16,6 +16,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_chat_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_voice_call_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/default_settings.dart';
@@ -104,6 +105,10 @@ Future<void> main(List<String> args) async {
       case WindowType.ChatWindow:
         desktopType = DesktopType.cm;
         runChatWindow(argument);
+        break;
+      case WindowType.VoiceCallWindow:
+        desktopType = DesktopType.cm;
+        runVoiceCallWindow(argument);
         break;
       default:
         break;
@@ -312,6 +317,32 @@ void runChatWindow(Map<String, dynamic> argument) async {
   );
 
   // Chat window specific settings
+  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
+
+  // Hide titlebar on non-macOS
+  if (!isMacOS) {
+    WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+  }
+
+  // Show the window
+  WindowController.fromWindowId(kWindowId!).show();
+}
+
+void runVoiceCallWindow(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeConnectionManager);
+  final peerId = argument['id'] as String;
+  final connId = argument['connId'] as int;
+
+  final title = "${getWindowName()} - Voice Call";
+  final widget = VoiceCallWindowScreen(peerId: peerId, connId: connId);
+
+  _runApp(
+    title,
+    widget,
+    MyTheme.currentThemeMode(),
+  );
+
+  // Voice call window specific settings - prevent close
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
 
   // Hide titlebar on non-macOS

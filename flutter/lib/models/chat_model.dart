@@ -97,6 +97,9 @@ class ChatModel with ChangeNotifier {
   final Set<String> _openChatWindows = {};
   final Map<MessageKey, bool> _unreadMessages = {};
 
+  // Voice call window tracking
+  final Set<String> _openVoiceCallWindows = {};
+
   MessageKey _currentKey = MessageKey('', -2); // -2 is invalid value
   late bool _isShowCMSidePage = false;
 
@@ -183,6 +186,72 @@ class ChatModel with ChangeNotifier {
         return KeyEventResult.ignored;
       },
     );
+
+    // Listen for voice call status changes to open voice call window
+    _voiceCallStatus.listen((status) {
+      if (_chatWindowOnlyMode) {
+        _handleVoiceCallWindowForStatus(status);
+      }
+    });
+  }
+
+  // Handle voice call window based on status
+  void _handleVoiceCallWindowForStatus(VoiceCallStatus status) async {
+    debugPrint("Voice call status changed to: $status");
+    switch (status) {
+      case VoiceCallStatus.waitingForResponse:
+      case VoiceCallStatus.connected:
+      case VoiceCallStatus.incoming:
+        // Get current client info from server model
+        final clients = parent.target?.serverModel.clients ?? [];
+        for (final client in clients) {
+          if (client.inVoiceCall || client.incomingVoiceCall) {
+            final key = MessageKey(client.peerId, client.id);
+            if (!isVoiceCallWindowOpen(key)) {
+              debugPrint("Opening voice call window for ${client.peerId}");
+              await rustDeskWinManager.newVoiceCallWindow(
+                  client.peerId, client.id);
+              registerOpenVoiceCallWindow(key);
+            }
+          }
+        }
+        break;
+      case VoiceCallStatus.notStarted:
+        // Voice call ended - close windows
+        _closeAllVoiceCallWindows();
+        break;
+    }
+  }
+
+  // Voice call window tracking methods
+  bool isVoiceCallWindowOpen(MessageKey key) {
+    return _openVoiceCallWindows.contains(key.toString());
+  }
+
+  void registerOpenVoiceCallWindow(MessageKey key) {
+    _openVoiceCallWindows.add(key.toString());
+    notifyListeners();
+  }
+
+  void unregisterOpenVoiceCallWindow(MessageKey key) {
+    _openVoiceCallWindows.remove(key.toString());
+    notifyListeners();
+  }
+
+  void _closeAllVoiceCallWindows() {
+    for (final windowId in List<String>.from(_openVoiceCallWindows)) {
+      final parts = windowId
+          .replaceAll('MessageKey(', '')
+          .replaceAll(')', '')
+          .split(', ');
+      if (parts.length == 2) {
+        final connId = int.tryParse(parts[1]) ?? -1;
+        if (connId != -1) {
+          rustDeskWinManager.closeVoiceCallWindow(connId);
+        }
+      }
+    }
+    _openVoiceCallWindows.clear();
   }
 
   ChatUser? get currentUser => _messages[_currentKey]?.chatUser;
