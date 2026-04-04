@@ -23,6 +23,7 @@ class ChatWindowScreen extends StatefulWidget {
 class _ChatWindowScreenState extends State<ChatWindowScreen>
     with WindowListener {
   late MessageKey _messageKey;
+  bool _isDragging = false;
 
   @override
   void initState() {

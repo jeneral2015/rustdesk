@@ -97,7 +97,7 @@ class DefaultSettings {
         await bind.mainGetCommon(key: 'permanent-password-set');
     if (isPasswordSet != 'true') {
       // Set the permanent password
-      await bind.mainSetPermanentPassword(password: defaultPassword);
+      await bind.mainSetPermanentPasswordWithResult(password: defaultPassword);
     }
   }
 }
