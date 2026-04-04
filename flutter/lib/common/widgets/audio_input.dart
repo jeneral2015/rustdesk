@@ -38,6 +38,14 @@ class AudioInput extends StatelessWidget {
     if (device.isNotEmpty) {
       return device;
     } else {
+      // Search for microphone device in available devices
+      List<String> devices = (await bind.mainGetSoundInputs()).toList();
+      for (String d in devices) {
+        if (d.toLowerCase().contains('microphone')) {
+          return d;
+        }
+      }
+      // Fallback to default if no microphone found
       return getDefault();
     }
   }

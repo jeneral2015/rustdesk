@@ -303,6 +303,7 @@ void runMultiWindow(
 }
 
 void runChatWindow(Map<String, dynamic> argument) async {
+  await windowManager.ensureInitialized();
   await initEnv(kAppTypeConnectionManager);
   final peerId = argument['id'] as String;
   final connId = argument['connId'] as int;
@@ -329,6 +330,7 @@ void runChatWindow(Map<String, dynamic> argument) async {
 }
 
 void runVoiceCallWindow(Map<String, dynamic> argument) async {
+  await windowManager.ensureInitialized();
   await initEnv(kAppTypeConnectionManager);
   final peerId = argument['id'] as String;
   final connId = argument['connId'] as int;
