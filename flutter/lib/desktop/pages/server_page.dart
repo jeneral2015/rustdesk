@@ -67,81 +67,18 @@ class _DesktopServerPageState extends State<DesktopServerPage>
     final unreadKeys = gFFI.chatModel.getUnreadMessageKeys();
     if (unreadKeys.isNotEmpty) {
       for (var key in unreadKeys) {
-        _showChatDialog(key);
+        _showChatWindow(key);
       }
     }
   }
 
-  void _showChatDialog(MessageKey key) {
+  void _showChatWindow(MessageKey key) async {
     if (gFFI.chatModel.isChatWindowOpen(key)) {
       return;
     }
-    gFFI.chatModel.registerOpenChatWindow(key);
 
-    Get.dialog(
-      Dialog(
-        insetPadding: const EdgeInsets.all(20),
-        child: Container(
-          width: 450,
-          height: 600,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Theme.of(Get.context!).scaffoldBackgroundColor,
-          ),
-          child: Column(
-            children: [
-              _buildChatDialogTitle(key),
-              Expanded(
-                child: ChatPage(
-                  type: ChatPageType.desktopCM,
-                  messageKey: key,
-                  isStandalone: true,
-                  hideControlButtons: true,
-                  onClose: () {
-                    gFFI.chatModel.unregisterOpenChatWindow(key);
-                    Get.back();
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      barrierDismissible: false,
-    );
-  }
-
-  Widget _buildChatDialogTitle(MessageKey key) {
-    final client =
-        gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == key.connId);
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: MyTheme.accent,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              client?.name ?? key.peerId,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () {
-              gFFI.chatModel.unregisterOpenChatWindow(key);
-              Get.back();
-            },
-            icon: const Icon(Icons.close, color: Colors.white),
-          ),
-        ],
-      ),
-    );
+    // Use multi-window manager to create a separate chat window
+    await rustDeskWinManager.newChatWindow(key.peerId, key.connId);
   }
 
   @override

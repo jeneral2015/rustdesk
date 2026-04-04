@@ -8,6 +8,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/input_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 
 /// must keep the order
 // ignore: constant_identifier_names
@@ -18,6 +19,7 @@ enum WindowType {
   ViewCamera,
   PortForward,
   Terminal,
+  ChatWindow, // New window type for chat dialogs
   Unknown
 }
 
@@ -36,6 +38,8 @@ extension Index on int {
         return WindowType.PortForward;
       case 5:
         return WindowType.Terminal;
+      case 6:
+        return WindowType.ChatWindow;
       default:
         return WindowType.Unknown;
     }
@@ -383,6 +387,77 @@ class RustDeskMultiWindowManager {
     return MultiWindowCallResult(windowId, null);
   }
 
+  // Chat window management
+  final List<int> _chatWindows = List.empty(growable: true);
+  final Map<int, String> _chatWindowPeerIds = {};
+
+  Future<int> newChatWindow(String peerId, int connId) async {
+    // Check if chat window already exists for this peer
+    for (final entry in _chatWindowPeerIds.entries) {
+      if (entry.value == peerId) {
+        // Window already exists, just show it
+        final windowId = entry.key;
+        await WindowController.fromWindowId(windowId).show();
+        await WindowController.fromWindowId(windowId).focus();
+        return windowId;
+      }
+    }
+
+    var params = {
+      "type": WindowType.ChatWindow.index,
+      "id": peerId,
+      "connId": connId,
+    };
+    final msg = jsonEncode(params);
+
+    // Create new chat window
+    final windowController = await DesktopMultiWindow.createWindow(msg);
+    if (isWindows) {
+      windowController.setInitBackgroundColor(Colors.transparent);
+    }
+    final windowId = windowController.windowId;
+
+    // Set window properties for chat window
+    windowController
+      ..setFrame(const Offset(100, 100) & const Size(450, 600))
+      ..setTitle("${getWindowName()} - Chat")
+      ..show()
+      ..focus();
+
+    registerActiveWindow(windowId);
+    _chatWindows.add(windowId);
+    _chatWindowPeerIds[windowId] = peerId;
+
+    // Hide from taskbar and system tray for chat-only mode
+    platformFFI.ffiBind.mainHideDock();
+
+    return windowId;
+  }
+
+  Future<void> closeChatWindow(int windowId) async {
+    if (_chatWindows.contains(windowId)) {
+      try {
+        await saveWindowPosition(WindowType.ChatWindow, windowId: windowId);
+        await WindowController.fromWindowId(windowId).setPreventClose(false);
+        await WindowController.fromWindowId(windowId).close();
+        _activeWindows.remove(windowId);
+        _chatWindows.remove(windowId);
+        _chatWindowPeerIds.remove(windowId);
+      } catch (e) {
+        debugPrint("Failed to close chat window: $e");
+      }
+    }
+  }
+
+  Future<void> closeAllChatWindows() async {
+    final windows = List<int>.from(_chatWindows);
+    for (final windowId in windows) {
+      await closeChatWindow(windowId);
+    }
+    _chatWindows.clear();
+    _chatWindowPeerIds.clear();
+  }
+
   Future<MultiWindowCallResult> call(
       WindowType type, String methodName, dynamic args) async {
     final wnds = _findWindowsByType(type);
@@ -415,6 +490,8 @@ class RustDeskMultiWindowManager {
         return _portForwardWindows;
       case WindowType.Terminal:
         return _terminalWindows;
+      case WindowType.ChatWindow:
+        return _chatWindows;
       case WindowType.Unknown:
         break;
     }
@@ -439,6 +516,11 @@ class RustDeskMultiWindowManager {
         break;
       case WindowType.Terminal:
         _terminalWindows.clear();
+        break;
+      case WindowType.ChatWindow:
+        _chatWindows.clear();
+        _chatWindowPeerIds.clear();
+        break;
       case WindowType.Unknown:
         break;
     }
@@ -472,7 +554,8 @@ class RustDeskMultiWindowManager {
     }
     for (int i = 0; i < windows.length; i++) {
       final wId = windows[i];
-      final shouldSavePos = type != WindowType.Terminal || i == windows.length - 1;
+      final shouldSavePos =
+          type != WindowType.Terminal || i == windows.length - 1;
       if (shouldSavePos) {
         debugPrint("closing multi window, type: ${type.toString()} id: $wId");
         try {

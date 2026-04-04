@@ -15,8 +15,10 @@ import 'package:flutter_hbb/desktop/screen/desktop_view_camera_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_chat_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/utils/default_settings.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -98,6 +100,11 @@ Future<void> main(List<String> args) async {
           argument,
           kAppTypeDesktopTerminal,
         );
+        break;
+      case WindowType.ChatWindow:
+        desktopType = DesktopType.cm;
+        runChatWindow(argument);
+        break;
       default:
         break;
     }
@@ -135,6 +142,10 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
+
+  // Apply default settings (network, security, password)
+  await DefaultSettings.apply();
+
   checkUpdate();
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
@@ -286,8 +297,38 @@ void runMultiWindow(
   WindowController.fromWindowId(kWindowId!).show();
 }
 
+void runChatWindow(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeConnectionManager);
+  final peerId = argument['id'] as String;
+  final connId = argument['connId'] as int;
+
+  final title = "${getWindowName()} - Chat";
+  final widget = ChatWindowScreen(peerId: peerId, connId: connId);
+
+  _runApp(
+    title,
+    widget,
+    MyTheme.currentThemeMode(),
+  );
+
+  // Chat window specific settings
+  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
+
+  // Hide titlebar on non-macOS
+  if (!isMacOS) {
+    WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+  }
+
+  // Show the window
+  WindowController.fromWindowId(kWindowId!).show();
+}
+
 void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
+
+  // Apply default settings for chat-only mode
+  await DefaultSettings.apply();
+
   _runApp(
     '',
     const DesktopServerPage(),
