@@ -392,11 +392,14 @@ class RustDeskMultiWindowManager {
   final Map<int, String> _chatWindowPeerIds = {};
 
   Future<int> newChatWindow(String peerId, int connId) async {
+    debugPrint("newChatWindow called for peer: $peerId, connId: $connId");
     // Check if chat window already exists for this peer
     for (final entry in _chatWindowPeerIds.entries) {
       if (entry.value == peerId) {
         // Window already exists, just show it
         final windowId = entry.key;
+        debugPrint(
+            "Chat window already exists for $peerId, showing window $windowId");
         await WindowController.fromWindowId(windowId).show();
         await WindowController.fromWindowId(windowId).focus();
         return windowId;
@@ -409,9 +412,12 @@ class RustDeskMultiWindowManager {
       "connId": connId,
     };
     final msg = jsonEncode(params);
+    debugPrint("Creating chat window with params: $msg");
 
     // Create new chat window
     final windowController = await DesktopMultiWindow.createWindow(msg);
+    debugPrint("Chat window created with ID: ${windowController.windowId}");
+
     if (isWindows) {
       windowController.setInitBackgroundColor(Colors.transparent);
     }
@@ -423,6 +429,8 @@ class RustDeskMultiWindowManager {
       ..setTitle("${getWindowName()} - Chat")
       ..show()
       ..focus();
+
+    debugPrint("Chat window $windowId shown and focused");
 
     registerActiveWindow(windowId);
     _chatWindows.add(windowId);

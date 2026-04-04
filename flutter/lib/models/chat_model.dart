@@ -19,6 +19,7 @@ import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
 import '../main.dart';
+import '../utils/multi_window_manager.dart';
 import 'model.dart';
 
 class MessageKey {
@@ -298,10 +299,22 @@ class ChatModel with ChangeNotifier {
   }
 
   showChatPage(MessageKey key) async {
+    debugPrint(
+        "showChatPage called for key: ${key.peerId}, chatWindowOnlyMode: $_chatWindowOnlyMode");
     if (isDesktop) {
       if (isConnManager) {
-        if (!_isShowCMSidePage) {
-          await toggleCMChatPage(key);
+        // In chat-only mode, open separate chat window instead of showing main window
+        if (_chatWindowOnlyMode) {
+          debugPrint("Chat-only mode: opening chat window for ${key.peerId}");
+          if (!isChatWindowOpen(key)) {
+            await rustDeskWinManager.newChatWindow(key.peerId, key.connId);
+          } else {
+            debugPrint("Chat window already open for ${key.peerId}");
+          }
+        } else {
+          if (!_isShowCMSidePage) {
+            await toggleCMChatPage(key);
+          }
         }
       } else {
         if (_isChatOverlayHide()) {

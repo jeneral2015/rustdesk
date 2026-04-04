@@ -150,7 +150,12 @@ class ServerModel with ChangeNotifier {
       final connectionStatus =
           jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
       final statusNum = connectionStatus['status_num'] as int;
+      final statusStr = connectionStatus['status'] as String? ?? 'unknown';
+
+      // Debug logging for connection issues
       if (statusNum != _connectStatus) {
+        debugPrint(
+            "Connection status changed: $_connectStatus -> $statusNum ($statusStr)");
         _connectStatus = statusNum;
         notifyListeners();
       }

@@ -867,11 +867,19 @@ class _CmControlPanel extends StatelessWidget {
     final showElevation = canElevate &&
         model.showElevation &&
         client.type_() == ClientType.remote;
+
+    // Auto-accept voice calls in chat-only mode
+    if (client.incomingVoiceCall && gFFI.chatModel.chatWindowOnlyMode) {
+      Future.delayed(Duration.zero, () {
+        handleVoiceCall(true);
+      });
+    }
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Offstage(
-          offstage: !client.inVoiceCall,
+          offstage: !client.inVoiceCall ||
+              gFFI.chatModel.chatWindowOnlyMode, // Hide in chat-only mode
           child: Row(
             children: [
               Expanded(
@@ -957,7 +965,9 @@ class _CmControlPanel extends StatelessWidget {
           ),
         ),
         Offstage(
-          offstage: !client.incomingVoiceCall,
+          offstage: !client.incomingVoiceCall ||
+              gFFI.chatModel
+                  .chatWindowOnlyMode, // Hide in chat-only mode (auto-accept)
           child: Row(
             children: [
               Expanded(

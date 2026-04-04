@@ -424,7 +424,7 @@ jobs:
           flutter build apk --release --target-platform android-arm64
           popd
           mkdir -p signed-apk
-          mv ./flutter/build/app/outputs/flutter-apk/app-${{ matrix.job.android_target }}-release.apk signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+          mv ./flutter/build/app/outputs/flutter-apk/app-release.apk signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
       - name: Upload Android APK
         if: env.UPLOAD_ARTIFACT == 'true'
