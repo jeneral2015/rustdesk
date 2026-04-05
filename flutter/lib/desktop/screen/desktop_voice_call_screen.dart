@@ -3,7 +3,8 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter_hbb/main.dart';
 
 /// Voice Call Window Screen - Standalone voice call window without close buttons
 class VoiceCallWindowScreen extends StatefulWidget {
@@ -20,77 +21,43 @@ class VoiceCallWindowScreen extends StatefulWidget {
   State<VoiceCallWindowScreen> createState() => _VoiceCallWindowScreenState();
 }
 
-class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen>
-    with WindowListener {
+class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
   late MessageKey _messageKey;
 
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
-    _initializeWindow();
     _messageKey = MessageKey(widget.peerId, widget.connId);
 
     // Register this voice call window
     gFFI.chatModel.changeCurrentKey(_messageKey);
   }
 
-  Future<void> _initializeWindow() async {
-    // Set window properties for voice call
-    await windowManager.setSize(Size(350, 200));
-    await windowManager.setMinimumSize(Size(300, 180));
-    await windowManager.setMaximumSize(Size(400, 250));
-    await windowManager.center();
-
-    // Make window always on top for visibility
-    await windowManager.setAlwaysOnTop(true);
-
-    // Show the window
-    await windowManager.show();
-    await windowManager.focus();
-  }
-
   @override
   void dispose() {
-    windowManager.removeListener(this);
     super.dispose();
   }
 
-  @override
-  void onWindowClose() async {
-    // Prevent closing - voice call continues running
-    // User cannot close this window manually
-    debugPrint("Voice call window close prevented - call continues");
-  }
-
   void _onDragStart(DragStartDetails details) {
-    // Drag started
+    WindowController.fromWindowId(kWindowId!).startDragging();
   }
 
   void _onDragUpdate(DragUpdateDetails details) async {
-    final currentPos = await windowManager.getPosition();
-    await windowManager.setPosition(
-      Offset(
-        currentPos.dx + details.delta.dx,
-        currentPos.dy + details.delta.dy,
-      ),
-    );
   }
 
   void _onDragEnd(DragEndDetails details) {
-    // Drag ended
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -102,7 +69,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen>
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
               border: Border.all(
-                color: MyTheme.accent.withOpacity(0.5),
+                color: MyTheme.accent.withValues(alpha: 0.5),
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(16),
@@ -145,7 +112,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen>
             cursor: SystemMouseCursors.move,
             child: Icon(
               Icons.drag_indicator,
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               size: 18,
             ),
           ),
@@ -165,14 +132,14 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen>
           // Voice call indicator
           Icon(
             Icons.call,
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             size: 18,
           ),
           const SizedBox(width: 8),
           // Only minimize button - no close button
           IconButton(
             onPressed: () async {
-              await windowManager.minimize();
+              await WindowController.fromWindowId(kWindowId!).minimize();
             },
             icon: const Icon(Icons.remove, color: Colors.white, size: 18),
             tooltip: 'Minimize',
