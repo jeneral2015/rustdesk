@@ -30,16 +30,21 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
     _messageKey = MessageKey(widget.peerId, widget.connId);
 
     // Register this voice call window
+    gFFI.chatModel.registerOpenChatWindow(_messageKey);
     gFFI.chatModel.changeCurrentKey(_messageKey);
   }
 
   @override
   void dispose() {
+    gFFI.chatModel.unregisterOpenChatWindow(_messageKey);
     super.dispose();
   }
 
   void _onDragStart(DragStartDetails details) {
-    WindowController.fromWindowId(kWindowId!).startDragging();
+    final windowId = kWindowId;
+    if (windowId != null) {
+      WindowController.fromWindowId(windowId).startDragging();
+    }
   }
 
   void _onDragUpdate(DragUpdateDetails details) async {
@@ -139,7 +144,10 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
           // Only minimize button - no close button
           IconButton(
             onPressed: () async {
-              await WindowController.fromWindowId(kWindowId!).minimize();
+              final windowId = kWindowId;
+              if (windowId != null) {
+                await WindowController.fromWindowId(windowId).minimize();
+              }
             },
             icon: const Icon(Icons.remove, color: Colors.white, size: 18),
             tooltip: 'Minimize',

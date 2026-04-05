@@ -40,7 +40,10 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
   }
 
   void _onDragStart(DragStartDetails details) {
-    WindowController.fromWindowId(kWindowId!).startDragging();
+    final windowId = kWindowId;
+    if (windowId != null) {
+      WindowController.fromWindowId(windowId).startDragging();
+    }
   }
 
   void _onDragUpdate(DragUpdateDetails details) async {
@@ -70,8 +73,10 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
               isStandalone: true,
               hideControlButtons: true,
               onClose: () async {
-                gFFI.chatModel.unregisterOpenChatWindow(_messageKey);
-                await WindowController.fromWindowId(kWindowId!).close();
+                final windowId = kWindowId;
+                if (windowId != null) {
+                  await WindowController.fromWindowId(windowId).close();
+                }
               },
             ),
           ),
@@ -117,7 +122,10 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
           // Minimize button
           IconButton(
             onPressed: () async {
-              await WindowController.fromWindowId(kWindowId!).minimize();
+              final windowId = kWindowId;
+              if (windowId != null) {
+                await WindowController.fromWindowId(windowId).minimize();
+              }
             },
             icon: const Icon(Icons.remove, color: Colors.white, size: 18),
             tooltip: 'Minimize',
@@ -126,8 +134,10 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
           // Close button
           IconButton(
             onPressed: () async {
-              gFFI.chatModel.unregisterOpenChatWindow(_messageKey);
-              await WindowController.fromWindowId(kWindowId!).close();
+              final windowId = kWindowId;
+              if (windowId != null) {
+                await WindowController.fromWindowId(windowId).close();
+              }
             },
             icon: const Icon(Icons.close, color: Colors.white, size: 18),
             tooltip: 'Close',

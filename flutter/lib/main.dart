@@ -303,20 +303,9 @@ void runMultiWindow(
 }
 
 void runChatWindow(Map<String, dynamic> argument) async {
-  await windowManager.ensureInitialized();
   await initEnv(kAppTypeConnectionManager);
   final peerId = argument['id'] as String;
   final connId = argument['connId'] as int;
-
-  // Set window options BEFORE running the app
-  WindowOptions windowOptions = WindowOptions(
-    size: Size(450, 600),
-    backgroundColor: Colors.white,
-    skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.hidden,
-  );
-
-  await windowManager.waitUntilReadyToShow(windowOptions, null);
 
   final title = "${getWindowName()} - Chat";
   final widget = ChatWindowScreen(peerId: peerId, connId: connId);
@@ -327,15 +316,21 @@ void runChatWindow(Map<String, dynamic> argument) async {
     MyTheme.currentThemeMode(),
   );
 
-  // Chat window specific settings
-  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
+  final windowId = kWindowId;
+  if (windowId != null) {
+    final controller = WindowController.fromWindowId(windowId);
+    controller.setPreventClose(true);
 
-  // Show the window
-  WindowController.fromWindowId(kWindowId!).show();
+    if (!isMacOS) {
+      controller.showTitleBar(false);
+    }
+
+    await restoreWindowPosition(WindowType.ChatWindow, windowId: windowId);
+    await controller.show();
+  }
 }
 
 void runVoiceCallWindow(Map<String, dynamic> argument) async {
-  await windowManager.ensureInitialized();
   await initEnv(kAppTypeConnectionManager);
   final peerId = argument['id'] as String;
   final connId = argument['connId'] as int;
@@ -349,16 +344,18 @@ void runVoiceCallWindow(Map<String, dynamic> argument) async {
     MyTheme.currentThemeMode(),
   );
 
-  // Voice call window specific settings - prevent close
-  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
+  final windowId = kWindowId;
+  if (windowId != null) {
+    final controller = WindowController.fromWindowId(windowId);
+    controller.setPreventClose(true);
 
-  // Hide titlebar on non-macOS
-  if (!isMacOS) {
-    WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+    if (!isMacOS) {
+      controller.showTitleBar(false);
+    }
+
+    await restoreWindowPosition(WindowType.VoiceCallWindow, windowId: windowId);
+    await controller.show();
   }
-
-  // Show the window
-  WindowController.fromWindowId(kWindowId!).show();
 }
 
 void runConnectionManagerScreen() async {
