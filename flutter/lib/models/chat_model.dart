@@ -202,10 +202,14 @@ class ChatModel with ChangeNotifier {
       case VoiceCallStatus.waitingForResponse:
       case VoiceCallStatus.connected:
       case VoiceCallStatus.incoming:
-        // Get current client info from server model
+        // Open voice call window immediately - don't wait for client state
         final clients = parent.target?.serverModel.clients ?? [];
+        debugPrint("Checking ${clients.length} clients for voice call");
         for (final client in clients) {
-          if (client.inVoiceCall || client.incomingVoiceCall) {
+          // For incoming calls, open window immediately without checking state
+          if (status == VoiceCallStatus.incoming ||
+              client.inVoiceCall ||
+              client.incomingVoiceCall) {
             final key = MessageKey(client.peerId, client.id);
             if (!isVoiceCallWindowOpen(key)) {
               debugPrint("Opening voice call window for ${client.peerId}");
@@ -532,7 +536,10 @@ class ChatModel with ChangeNotifier {
         return;
       }
       if (isDesktop) {
-        windowOnTop(null);
+        // Only bring window to front if not in chat-only mode
+        if (!_chatWindowOnlyMode) {
+          windowOnTop(null);
+        }
         // disable auto jumpTo other tab when hasFocus, and mark unread message
         final currentSelectedTab =
             session.serverModel.tabController.state.value.selectedTabInfo;

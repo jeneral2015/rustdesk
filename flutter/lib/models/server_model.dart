@@ -171,7 +171,10 @@ class ServerModel with ChangeNotifier {
             // Only hide the window if needed
             hideCmWindow();
           } else {
-            if (!hideCm) showCmWindow();
+            // Only show CM window if not in chat-only mode
+            if (!hideCm && !gFFI.chatModel.chatWindowOnlyMode) {
+              showCmWindow();
+            }
           }
         }
       }
@@ -531,7 +534,7 @@ class ServerModel with ChangeNotifier {
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
         hideCmWindow();
-      } else if (!hideCm) {
+      } else if (!hideCm && !gFFI.chatModel.chatWindowOnlyMode) {
         showCmWindow();
       }
     }
@@ -566,7 +569,9 @@ class ServerModel with ChangeNotifier {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
       }
-      if (desktopType == DesktopType.cm && !hideCm) {
+      if (desktopType == DesktopType.cm &&
+          !hideCm &&
+          !gFFI.chatModel.chatWindowOnlyMode) {
         showCmWindow();
       }
       scrollToBottom();
@@ -586,7 +591,9 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) windowOnTop(null);
+      if (!hideCm && !gFFI.chatModel.chatWindowOnlyMode) {
+        windowOnTop(null);
+      }
     });
     // Only do the hidden task when on Desktop.
     if (client.authorized && isDesktop) {

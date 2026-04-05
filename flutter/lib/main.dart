@@ -308,6 +308,16 @@ void runChatWindow(Map<String, dynamic> argument) async {
   final peerId = argument['id'] as String;
   final connId = argument['connId'] as int;
 
+  // Set window options BEFORE running the app
+  WindowOptions windowOptions = WindowOptions(
+    size: Size(450, 600),
+    backgroundColor: Colors.white,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+
+  await windowManager.waitUntilReadyToShow(windowOptions, null);
+
   final title = "${getWindowName()} - Chat";
   final widget = ChatWindowScreen(peerId: peerId, connId: connId);
 
@@ -319,11 +329,6 @@ void runChatWindow(Map<String, dynamic> argument) async {
 
   // Chat window specific settings
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
-
-  // Hide titlebar on non-macOS
-  if (!isMacOS) {
-    WindowController.fromWindowId(kWindowId!).showTitleBar(false);
-  }
 
   // Show the window
   WindowController.fromWindowId(kWindowId!).show();

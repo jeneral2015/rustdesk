@@ -36,7 +36,7 @@ env:
   # إصدار التطبيق
   VERSION: "1.4.6"
   # اسم الـ tag للرفع
-  TAG_NAME: "${{ github.event.inputs.upload_tag || 'nightly3' }}"
+  TAG_NAME: "${{ github.event.inputs.upload_tag || 'nightly4' }}"
   UPLOAD_ARTIFACT: "${{ github.event.inputs.upload_artifact || 'true' }}"
 
 jobs:
