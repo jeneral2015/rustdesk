@@ -761,10 +761,8 @@ class ServerModel with ChangeNotifier {
           if (isAndroid) {
             showVoiceCallDialog(client);
           } else {
-            // Has incoming phone call, let's set the window on top.
-            Future.delayed(Duration.zero, () {
-              windowOnTop(null);
-            });
+            // For desktop, trigger voice call handling which opens voice call window
+            parent.target?.chatModel.onVoiceCallIncoming();
           }
         }
         notifyListeners();

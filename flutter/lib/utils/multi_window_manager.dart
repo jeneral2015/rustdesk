@@ -421,9 +421,6 @@ class RustDeskMultiWindowManager {
     final windowController = await DesktopMultiWindow.createWindow(msg);
     debugPrint("Chat window created with ID: ${windowController.windowId}");
 
-    if (isWindows) {
-      windowController.setInitBackgroundColor(Colors.transparent);
-    }
     final windowId = windowController.windowId;
 
     // Set window properties for chat window

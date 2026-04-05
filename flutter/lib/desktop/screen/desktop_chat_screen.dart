@@ -47,61 +47,35 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
     // startDragging handles it natively
   }
 
-  void _onDragEnd(DragEndDetails details) {
-  }
+  void _onDragEnd(DragEndDetails details) {}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 20,
-              spreadRadius: 5,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              border: Border.all(
-                color: MyTheme.accent.withOpacity(0.5),
-                width: 2,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                // Draggable title bar
-                GestureDetector(
-                  onPanStart: _onDragStart,
-                  onPanUpdate: _onDragUpdate,
-                  onPanEnd: _onDragEnd,
-                  child: _buildTitleBar(),
-                ),
-                // Chat content
-                Expanded(
-                  child: ChatPage(
-                    type: ChatPageType.desktopCM,
-                    messageKey: _messageKey,
-                    isStandalone: true,
-                    hideControlButtons: true,
-                    onClose: () async {
-                      gFFI.chatModel.unregisterOpenChatWindow(_messageKey);
-                      await WindowController.fromWindowId(kWindowId!).close();
-                    },
-                  ),
-                ),
-              ],
+      body: Column(
+        children: [
+          // Draggable title bar
+          GestureDetector(
+            onPanStart: _onDragStart,
+            onPanUpdate: _onDragUpdate,
+            onPanEnd: _onDragEnd,
+            child: _buildTitleBar(),
+          ),
+          // Chat content
+          Expanded(
+            child: ChatPage(
+              type: ChatPageType.desktopCM,
+              messageKey: _messageKey,
+              isStandalone: true,
+              hideControlButtons: true,
+              onClose: () async {
+                gFFI.chatModel.unregisterOpenChatWindow(_messageKey);
+                await WindowController.fromWindowId(kWindowId!).close();
+              },
             ),
           ),
-        ),
+        ],
       ),
     );
   }

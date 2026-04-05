@@ -471,7 +471,7 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
-    if (desktopType == DesktopType.cm) {
+    if (desktopType == DesktopType.cm && !_chatWindowOnlyMode) {
       await showCmWindow();
     }
     String? peerId;
@@ -669,6 +669,18 @@ class ChatModel with ChangeNotifier {
   void onVoiceCallIncoming() {
     if (isConnManager) {
       _voiceCallStatus.value = VoiceCallStatus.incoming;
+      // Auto-accept voice calls in chat-only mode
+      if (_chatWindowOnlyMode) {
+        Future.delayed(Duration.zero, () async {
+          final clients = parent.target?.serverModel.clients ?? [];
+          for (final client in clients) {
+            if (client.incomingVoiceCall) {
+              bind.cmHandleIncomingVoiceCall(id: client.id, accept: true);
+              break;
+            }
+          }
+        });
+      }
     }
   }
 
