@@ -57,7 +57,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -69,7 +69,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
               border: Border.all(
-                color: MyTheme.accent.withValues(alpha: 0.5),
+                color: MyTheme.accent.withOpacity(0.5),
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(16),
@@ -112,7 +112,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
             cursor: SystemMouseCursors.move,
             child: Icon(
               Icons.drag_indicator,
-              color: Colors.white.withValues(alpha: 0.7),
+              color: Colors.white.withOpacity(0.7),
               size: 18,
             ),
           ),
@@ -132,7 +132,7 @@ class _VoiceCallWindowScreenState extends State<VoiceCallWindowScreen> {
           // Voice call indicator
           Icon(
             Icons.call,
-            color: Colors.white.withValues(alpha: 0.8),
+            color: Colors.white.withOpacity(0.8),
             size: 18,
           ),
           const SizedBox(width: 8),

@@ -59,7 +59,7 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -71,7 +71,7 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
               border: Border.all(
-                color: MyTheme.accent.withValues(alpha: 0.5),
+                color: MyTheme.accent.withOpacity(0.5),
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(16),
@@ -123,7 +123,7 @@ class _ChatWindowScreenState extends State<ChatWindowScreen> {
             cursor: SystemMouseCursors.move,
             child: Icon(
               Icons.drag_indicator,
-              color: Colors.white.withValues(alpha: 0.7),
+              color: Colors.white.withOpacity(0.7),
               size: 20,
             ),
           ),
