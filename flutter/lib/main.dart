@@ -369,6 +369,11 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  // Enable chat-only mode: open separate chat/voice-call windows
+  // instead of showing the CM window on incoming messages/calls.
+  gFFI.chatModel.enableChatWindowOnlyMode();
+  gFFI.chatModel.isConnManager = true;
+  debugPrint("✅ ChatWindowOnlyMode enabled, isConnManager = true");
   // Always hide CM window at startup for chat-only background mode
   gFFI.serverModel.hideCm = true;
   await hideCmWindow(isStartup: true);
